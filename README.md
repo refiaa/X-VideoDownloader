@@ -91,7 +91,7 @@ MAX_CONSECUTIVE_NO_NEW_CONTENT=15
 
 **レート制限エラー**
 ```
-ERROR: [twitter] 1823554888883732842: No video could be found in this tweet
+ERROR: [twitter] 13240971234234124: No video could be found in this tweet
 ```
 - Twitterのレート制限
 - 時間をおいて再実行
