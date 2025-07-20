@@ -20,7 +20,7 @@
 │      downloader.py
 │      getId.py
 │      __init__.py
-│      twitter_cookies.txt
+│      x.com_cookies.txt
 │
 └─videos
         .gitkeep
