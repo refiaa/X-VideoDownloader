@@ -91,6 +91,8 @@ MAX_CONSECUTIVE_NO_NEW_CONTENT=15
 
 **レート制限エラー**
 ```
+WARNING: [twitter] Rate-limit exceeded; falling back to syndication endpoint
+WARNING: [twitter] 13240971234234124: Not all metadata or media is available via syndication endpoint
 ERROR: [twitter] 13240971234234124: No video could be found in this tweet
 ```
 - Twitterのレート制限
