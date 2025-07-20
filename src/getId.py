@@ -281,12 +281,15 @@ class AutoNavigationHandler:
         self.driver = driver
         self.config = config
         self.wait = WebDriverWait(driver, config.timeout)
+        self.twitter_username = os.getenv("TWITTER_USERNAME")
+        self.twitter_password = os.getenv("TWITTER_PASSWORD")
     
     def auto_navigate_to_media(self, username: str) -> bool:
         strategies = [
             self._try_direct_media_access,
             self._try_home_then_media,
-            self._try_login_then_media
+            self._try_auto_login_then_media,
+            self._try_manual_login_then_media
         ]
         
         for i, strategy in enumerate(strategies):
@@ -322,14 +325,148 @@ class AutoNavigationHandler:
         
         return self._verify_media_page_loaded()
     
-    def _try_login_then_media(self, username: str) -> bool:
-        logger.info("Strategy 3: Login page with auto-detection")
+    def _try_auto_login_then_media(self, username: str) -> bool:
+        logger.info("Strategy 3: Automatic login")
+        
+        if not self.twitter_username or not self.twitter_password:
+            logger.info("Twitter credentials not found in environment variables, skipping auto login")
+            return False
+        
+        logger.info("Attempting automatic login with provided credentials")
+        
+        self.driver.get(f"{self.config.base_url}/login")
+        time.sleep(3)
+        
+        try:
+            logger.info("Step 1: Entering username...")
+            username_selectors = [
+                'input[name="text"]',
+                'input[autocomplete="username"]',
+                'input[type="text"]'
+            ]
+            
+            username_input = None
+            for selector in username_selectors:
+                try:
+                    username_input = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not username_input:
+                logger.error("Could not find username input field")
+                return False
+            
+            username_input.clear()
+            username_input.send_keys(self.twitter_username)
+            time.sleep(1)
+            
+            logger.info("Clicking 'Next' button...")
+            next_button_selectors = [
+                'button[type="button"]:not([aria-label]):not([data-testid]):nth-of-type(1)',
+                'button[role="button"]:has(span:contains("次へ"))',
+                'div[role="button"]:has(span:contains("次へ"))',
+                'button[type="button"][style*="background-color: rgb(15, 20, 25)"]'
+            ]
+            
+            next_button = None
+            for selector in next_button_selectors:
+                try:
+                    buttons = self.driver.find_elements(By.CSS_SELECTOR, 'button[type="button"]')
+                    for button in buttons:
+                        button_text = button.text.strip()
+                        style = button.get_attribute('style') or ''
+                        if ('次へ' in button_text or 
+                            'Next' in button_text or 
+                            'background-color: rgb(15, 20, 25)' in style):
+                            next_button = button
+                            break
+                    if next_button:
+                        break
+                except:
+                    continue
+            
+            if not next_button:
+                buttons = self.driver.find_elements(By.CSS_SELECTOR, 'button[type="button"]')
+                for button in buttons:
+                    if button.is_enabled() and button.is_displayed():
+                        style = button.get_attribute('style') or ''
+                        if 'background-color: rgb(15, 20, 25)' in style:
+                            next_button = button
+                            break
+            
+            if not next_button:
+                logger.error("Could not find 'Next' button")
+                return False
+            
+            next_button.click()
+            time.sleep(3)
+            
+            logger.info("Step 2: Entering password...")
+            password_selectors = [
+                'input[name="password"]',
+                'input[autocomplete="current-password"]',
+                'input[type="password"]'
+            ]
+            
+            password_input = None
+            for selector in password_selectors:
+                try:
+                    password_input = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not password_input:
+                logger.error("Could not find password input field")
+                return False
+            
+            password_input.clear()
+            password_input.send_keys(self.twitter_password)
+            time.sleep(1)
+            
+            logger.info("Clicking 'Login' button...")
+            login_button = None
+            buttons = self.driver.find_elements(By.CSS_SELECTOR, 'button[type="button"]')
+            for button in buttons:
+                if button.is_enabled() and button.is_displayed():
+                    button_text = button.text.strip()
+                    style = button.get_attribute('style') or ''
+                    if (('ログイン' in button_text or 'Login' in button_text or 'Log in' in button_text) or
+                        ('background-color: rgb(15, 20, 25)' in style and len(button_text) < 10)):
+                        login_button = button
+                        break
+            
+            if not login_button:
+                logger.error("Could not find 'Login' button")
+                return False
+            
+            login_button.click()
+            time.sleep(5)
+            
+            if self._verify_login_success():
+                logger.info("Automatic login successful! Navigating to media page...")
+                media_url = f"{self.config.base_url}/{username}/media"
+                self.driver.get(media_url)
+                time.sleep(self.config.wait_after_load)
+                return self._verify_media_page_loaded()
+            else:
+                logger.error("Automatic login failed")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Automatic login failed with error: {e}")
+            return False
+    
+    def _try_manual_login_then_media(self, username: str) -> bool:
+        logger.info("Strategy 4: Manual login with auto-detection")
         
         self.driver.get(f"{self.config.base_url}/login")
         
         print("\n" + "="*60)
-        print("AUTOMATIC LOGIN DETECTION")
+        print("MANUAL LOGIN REQUIRED")
         print("="*60)
+        print("Automatic login failed or credentials not provided.")
         print("1. Browser opened to X.com login page")
         print("2. Please log in manually in the browser")
         print("3. After login, the script will automatically navigate to media page")
@@ -345,6 +482,32 @@ class AutoNavigationHandler:
             time.sleep(self.config.wait_after_load)
             
             return self._verify_media_page_loaded()
+        
+        return False
+    
+    def _verify_login_success(self) -> bool:
+        current_url = self.driver.current_url
+        
+        login_indicators = ['/login', '/flow/login', '/i/flow/login']
+        if any(indicator in current_url for indicator in login_indicators):
+            return False
+        
+        if ('/home' in current_url or 
+            current_url.endswith('x.com/') or 
+            current_url.endswith('x.com')):
+            return True
+        
+        try:
+            nav_elements = self.driver.find_elements(By.CSS_SELECTOR, '[data-testid="SideNav_AccountSwitcher_Button"]')
+            if nav_elements:
+                return True
+                
+            home_elements = self.driver.find_elements(By.CSS_SELECTOR, '[data-testid="AppTabBar_Home_Link"]')
+            if home_elements:
+                return True
+                
+        except Exception:
+            pass
         
         return False
     
@@ -400,7 +563,7 @@ class AutoNavigationHandler:
         
         try:
             page_text = self.driver.find_element(By.TAG_NAME, "body").text
-            if len(page_text) > 500:  # Reasonable amount of content
+            if len(page_text) > 500:
                 logger.info("Media page has content, proceeding...")
                 return True
         except Exception:
@@ -560,8 +723,10 @@ class TwitterMediaScraper:
         return exported_files
 
 def main():
+    # Load configuration from environment variables
     config = ScrapingConfig.from_env()
     
+    # Get target username from environment variable
     username = os.getenv("TARGET_USERNAME")
     if not username:
         logger.error("TARGET_USERNAME not set in environment variables")
