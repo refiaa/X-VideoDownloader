@@ -26,7 +26,7 @@ OUTPUT_DIR = os.getenv("OUTPUT_DIR", "output")
 VIDEOS_DIR = os.getenv("VIDEOS_DIR", "videos")
 
 DEFAULT_OUTPUT = PROJECT_ROOT / VIDEOS_DIR
-COOKIES_FILE   = HERE / "twitter_cookies.txt"
+COOKIES_FILE   = HERE / "x.com_cookies.txt"
 
 def find_latest_csv():
     output_path = PROJECT_ROOT / OUTPUT_DIR
